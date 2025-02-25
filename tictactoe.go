@@ -13,27 +13,57 @@ const (
 	UPPERBOUND uint8 = 3
 )
 
+const N uint16 = 4
+
 const (
-	OUT_OF_BOUNDS uint16 = 0b1111111000000000
-	FULL_BOARD    uint16 = 0b0000000111111111
-	COL_1         uint16 = 0b0000000100100100
-	COL_2         uint16 = 0b0000000010010010
-	COL_3         uint16 = 0b0000000001001001
-	ROW_1         uint16 = 0b0000000111000000
-	ROW_2         uint16 = 0b0000000000111000
-	ROW_3         uint16 = 0b0000000000000111
-	DIAG_UP       uint16 = 0b0000000001010100
-	DIAG_DOWN     uint16 = 0b0000000100010001
+	// OUT_OF_BOUNDS uint16 = 0b1111111000000000
+	// FULL_BOARD    uint16 = 0b0000000111111111
+	// COL_1         uint16 = 0b0000000100100100
+	// COL_2         uint16 = 0b0000000010010010
+	// COL_3         uint16 = 0b0000000001001001
+	// ROW_1         uint16 = 0b0000000111000000
+	// ROW_2         uint16 = 0b0000000000111000
+	// ROW_3         uint16 = 0b0000000000000111
+	// DIAG_UP       uint16 = 0b0000000001010100
+	// DIAG_DOWN     uint16 = 0b0000000100010001
+
+	OUT_OF_BOUNDS uint16 = 0b0000000000000000
+	FULL_BOARD    uint16 = 0b1111111111111111
 )
 
-const N uint16 = 3
-
 var WINNING_PATTERNS = []uint16{
-	COL_1, COL_2, COL_3, ROW_1, ROW_2, ROW_3, DIAG_DOWN, DIAG_UP,
+	0b0000000000000111,
+	0b0000000000001110,
+	0b0000000001110000,
+	0b0000000011100000,
+	0b0000011100000000,
+	0b0000111000000000,
+	0b0111000000000000,
+	0b1110000000000000,
+
+	0b0000000100010001,
+	0b0001000100010000,
+	0b0000001000100010,
+	0b0010001000100000,
+	0b0000010001000100,
+	0b0100010001000000,
+	0b0000100010001000,
+	0b1000100010000000,
+
+	0b0000010000100001,
+	0b0000100001000010,
+	0b0100001000010000,
+	0b1000010000100000,
+
+	0b0000000100100100,
+	0b0000001001001000,
+	0b0001001001000000,
+	0b0010010010000000,
 }
 
 var zobrist_table = make([]uint64, 2*N*N)
-var tTable = NewTranspositionTable(8192)
+var ttHits int64 = 0
+var tranTable = make(map[uint64]*TtEntry)
 
 func init_zobrist() {
 	for i := range 2 * N * N {
@@ -48,58 +78,7 @@ type TtEntry struct {
 	value   int16
 }
 
-type TtNode struct {
-	entry TtEntry
-	next  *TtNode
-}
-
-type TranspositionTable struct {
-	buckets []*TtNode
-	size    uint64
-}
-
-func NewTranspositionTable(size uint64) *TranspositionTable {
-	return &TranspositionTable{
-		buckets: make([]*TtNode, size),
-		size:    size,
-	}
-}
-
-func (tt *TranspositionTable) store(entry TtEntry) {
-	index := entry.zobrist % tt.size
-	node := &TtNode{entry: entry}
-
-	if tt.buckets[index] == nil {
-		tt.buckets[index] = node
-	} else {
-		curr := tt.buckets[index]
-		for curr.next != nil {
-			if curr.entry.zobrist == entry.zobrist {
-				curr.entry = entry
-				return
-			}
-			curr = curr.next
-		}
-		curr.next = node
-	}
-}
-
-func (tt *TranspositionTable) lookup(zobrist uint64) *TtEntry {
-	index := zobrist % tt.size
-	if tt.buckets[index] != nil {
-		curr := tt.buckets[index]
-		for curr.next != nil {
-			if curr.entry.zobrist == zobrist {
-				return &curr.entry
-			}
-			curr = curr.next
-		}
-	}
-
-	return nil
-}
-
-func (tt *TranspositionTable) zobrist_hash(xMoves, oMoves uint16) uint64 {
+func zobrist_hash(xMoves, oMoves uint16) uint64 {
 	var h uint64 = 0
 	for i := range N * N {
 		if xMoves|(0b1<<i) == xMoves {
@@ -141,19 +120,13 @@ func evalBoard(player, adversary uint16) int16 {
 	return 0
 }
 
-func negamax(agent, adversary uint16, depth uint16, alpha, beta int16, marker bool) int16 {
+func negamax(boardHash uint64, agent, adversary uint16, depth uint16, alpha, beta int16, marker bool) int16 {
 	alphaOrig := alpha
-	var ttEntry *TtEntry
-	if marker {
-		// ttEntry = tTable.lookup(agent, adversary)
-		ttEntry = tTable.lookup(tTable.zobrist_hash(agent, adversary))
-	} else {
-		// ttEntry = tTable.lookup(adversary, agent)
-		ttEntry = tTable.lookup(tTable.zobrist_hash(adversary, agent))
-	}
+
+	ttEntry := tranTable[boardHash]
 
 	if ttEntry != nil && ttEntry.depth >= depth {
-		// fmt.Println("HOLA")
+		ttHits++
 		if ttEntry.flag == EXACT {
 			return ttEntry.value
 		} else if ttEntry.flag == LOWERBOUND {
@@ -163,9 +136,10 @@ func negamax(agent, adversary uint16, depth uint16, alpha, beta int16, marker bo
 		}
 
 		if alpha >= beta {
-			// fmt.Println("cutoff")
 			return ttEntry.value
 		}
+	} else if ttEntry == nil {
+		ttEntry = &TtEntry{zobrist: boardHash}
 	}
 
 	if depth == 0 || isFull(agent|adversary) {
@@ -182,21 +156,20 @@ func negamax(agent, adversary uint16, depth uint16, alpha, beta int16, marker bo
 	value := int16(-10000)
 	for _, move := range getPossibleMoves(agent | adversary) {
 		adversary |= 0b1 << move
-		value = max(value, -negamax(adversary, agent, depth-1, -beta, -alpha, !marker))
+
+		newHash := boardHash
+		if marker {
+			newHash ^= zobrist_table[move]
+		} else {
+			newHash ^= zobrist_table[N*N+move]
+		}
+
+		value = max(value, -negamax(newHash, adversary, agent, depth-1, -beta, -alpha, !marker))
+
 		adversary ^= 0b1 << move
 		alpha = max(alpha, value)
 		if alpha >= beta {
 			break
-		}
-	}
-
-	if ttEntry == nil {
-		if marker {
-			// ttEntry = &TtEntry{oMoves: adversary, xMoves: agent}
-			ttEntry = &TtEntry{zobrist: tTable.zobrist_hash(agent, adversary)}
-		} else {
-			// ttEntry = &TtEntry{oMoves: agent, xMoves: adversary}
-			ttEntry = &TtEntry{zobrist: tTable.zobrist_hash(adversary, agent)}
 		}
 	}
 
@@ -209,13 +182,13 @@ func negamax(agent, adversary uint16, depth uint16, alpha, beta int16, marker bo
 		ttEntry.flag = EXACT
 	}
 	ttEntry.depth = depth
-	tTable.store(*ttEntry)
+	tranTable[boardHash] = ttEntry
 
 	return value
 }
 
 func playerMove(player, adversary uint16) uint16 {
-	var idx uint16 = 10
+	var idx uint16 = 123
 	for idx >= N*N {
 		fmt.Printf("Your move: ")
 		fmt.Scanf("%d", &idx)
@@ -230,7 +203,9 @@ func agentMove(agent, adversary uint16) uint16 {
 	fmt.Println("Agent's move:")
 	for _, move := range getPossibleMoves(agent | adversary) {
 		agent |= 0b1 << move
-		newScore := -negamax(agent, adversary, 16, -10000, 10000, false)
+		boardHash := zobrist_hash(adversary, agent)
+		// fmt.Println(boardHash)
+		newScore := -negamax(boardHash, agent, adversary, 16, -10000, 10000, false)
 		// fmt.Println("\t",newScore)
 		agent ^= 0b1 << move
 		if newScore > score {
@@ -261,15 +236,12 @@ func printBoard(xMoves, oMoves uint16) {
 
 func main() {
 	var player1, player2 uint16
-	var color int16 = -1
 	printBoard(player1, player2)
 	init_zobrist()
-	// for _,v := range WINNING_PATTERNS {
-	// 	fmt.Printf("%b, %v\n", v, v)
-	// }
-	fmt.Println(zobrist_table)
+
+	xTurn := false
 	for !isFull(player1 | player2) {
-		if color == 1 {
+		if xTurn {
 			player1 = playerMove(player1, player2)
 		} else {
 			start := time.Now()
@@ -284,20 +256,7 @@ func main() {
 			break
 		}
 
-		color *= -1
+		xTurn = !xTurn
 	}
-	// fmt.Println(tTable)
-	// for _, list := range tTable.buckets {
-	// 	if list != nil {
-	// 		curr := list
-	// 		for curr.next != nil {
-	// 			fmt.Printf("%v\n", curr.entry)
-	// 			curr = curr.next
-	// 		}
-	// 	}
-	// }
-	myEntry := tTable.lookup(tTable.zobrist_hash(0, 1))
-	fmt.Printf("%v\n", myEntry)
-	myEntry = tTable.lookup(tTable.zobrist_hash(1, 0))
-	fmt.Printf("%v\n", myEntry)
+	fmt.Println(ttHits)
 }
