@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"iter"
+)
 
 func main() {
 	var num uint16 = 0b0000000000000000
@@ -15,5 +18,6 @@ func main() {
 	for i := range(4) {
 		fmt.Println(i)
 	}
+	fmt.Println()
 
 }
