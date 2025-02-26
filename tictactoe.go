@@ -226,6 +226,7 @@ func agentMove(agent, adversary uint16) uint16 {
 func getSmartMove(agent, adversary uint16) uint16 {
 	var bestScore int16 = -10000
 	var bestMove uint16 = 1000
+	bestMoves := make([]uint16, 0)
 
 	for i := range N * N {
 		bestScore = -10000
@@ -244,12 +245,24 @@ func getSmartMove(agent, adversary uint16) uint16 {
 			if newScore > bestScore {
 				bestScore = newScore
 				bestMove = move
+				if newScore < 0 {
+					bestMoves = make([]uint16, 0)
+				}
+			}
+			if bestScore < 0 && newScore  == bestScore {
+				bestMoves = append(bestMoves, move)
 			}
 		}
 	}
 
-	if bestScore < 0 {
-		return getDesperateMove(agent, adversary)
+	if bestScore < 0 && len(bestMoves) > 1 {
+		for _, move := range bestMoves {
+			adversary |= 0b1 << move
+			if score := evalBoard(agent, adversary); score != 0 {
+				return agent | (0b1 << move)
+			}
+			adversary ^= 0b1 << move
+		}
 	}
 
 	return agent | (0b1 << bestMove)
