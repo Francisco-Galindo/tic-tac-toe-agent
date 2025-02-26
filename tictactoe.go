@@ -191,7 +191,7 @@ func negamax(boardHash uint64, agent, adversary uint16, depth uint16, alpha, bet
 func playerMove(player, adversary uint16) uint16 {
 	var idx uint16 = 123
 	board := player | adversary
-	for idx >= N*N || (board | (0b1 << idx) == board) {
+	for idx >= N*N || (board|(0b1<<idx) == board) {
 		fmt.Printf("Your move: ")
 		fmt.Scanf("%d", &idx)
 	}
@@ -207,8 +207,7 @@ func getSmartMove(agent, adversary uint16) uint16 {
 	var bestScore int16 = -10000
 	var bestMove uint16 = 1000
 
-
-	for i := range N*N {
+	for i := range N * N {
 		bestScore = -10000
 		bestMove = 1000
 		for _, move := range getPossibleMoves(agent | adversary) {
@@ -238,20 +237,11 @@ func getSmartMove(agent, adversary uint16) uint16 {
 
 func getDesperateMove(agent, adversary uint16) uint16 {
 	for _, move := range getPossibleMoves(agent | adversary) {
-		agent |= 0b1 << move
-		score := evalBoard(agent, adversary);
-		agent ^= 0b1 << move
-		if score != 0 {
-			return agent | (0b1 << move)
-		}
-
 		adversary |= 0b1 << move
-		score = evalBoard(agent, adversary);
-		adversary ^= 0b1 << move
-
-		if score != 0 {
+		if score := evalBoard(agent, adversary); score != 0 {
 			return agent | (0b1 << move)
 		}
+		adversary ^= 0b1 << move
 	}
 	return getRandomMove(agent, adversary)
 }
@@ -260,8 +250,8 @@ func getRandomMove(agent, adversary uint16) uint16 {
 	move := uint16(10000)
 	board := agent | adversary
 
-	for move >= N*N || (board | (0b1 << move)) == board {
-		move = uint16(rand.Intn(int(N*N)))
+	for move >= N*N || (board|(0b1<<move)) == board {
+		move = uint16(rand.Intn(int(N * N)))
 	}
 
 	return (agent | 0b1<<move)
