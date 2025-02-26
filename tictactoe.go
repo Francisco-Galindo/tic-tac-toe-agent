@@ -190,7 +190,8 @@ func negamax(boardHash uint64, agent, adversary uint16, depth uint16, alpha, bet
 
 func playerMove(player, adversary uint16) uint16 {
 	var idx uint16 = 123
-	for idx >= N*N {
+	board := player | adversary
+	for idx >= N*N || (board | (0b1 << idx) == board) {
 		fmt.Printf("Your move: ")
 		fmt.Scanf("%d", &idx)
 	}
@@ -198,28 +199,72 @@ func playerMove(player, adversary uint16) uint16 {
 }
 
 func agentMove(agent, adversary uint16) uint16 {
-	var score int16 = -10000
+	fmt.Println("Agent's move...")
+	return getSmartMove(agent, adversary)
+}
+
+func getSmartMove(agent, adversary uint16) uint16 {
+	var bestScore int16 = -10000
 	var bestMove uint16 = 1000
-	fmt.Println("Agent's move:")
+
+
 	for i := range N*N {
-		score = -10000
+		bestScore = -10000
 		bestMove = 1000
 		for _, move := range getPossibleMoves(agent | adversary) {
-			agent |= 0b1 << move
+			agent |= 0b1 << move // Haz el movimiento
 			boardHash := zobrist_hash(adversary, agent)
-			// newScore := -negamax(boardHash, agent, adversary, 16, -10000, 10000, false)
 			newScore := -negamax(boardHash, agent, adversary, i, -10000, 10000, false)
-			agent ^= 0b1 << move
-			if newScore > score {
-				score = newScore
-				bestMove = move
+
+			if newScore > 0 {
+				return agent | (0b1 << move)
 			}
-			if score > 0 {
-				return agent | (0b1 << bestMove)
+
+			agent ^= 0b1 << move // Deshaz el movimiento
+
+			if newScore > bestScore {
+				bestScore = newScore
+				bestMove = move
 			}
 		}
 	}
+
+	if bestScore < 0 {
+		return getDesperateMove(agent, adversary)
+	}
+
 	return agent | (0b1 << bestMove)
+}
+
+func getDesperateMove(agent, adversary uint16) uint16 {
+	for _, move := range getPossibleMoves(agent | adversary) {
+		agent |= 0b1 << move
+		score := evalBoard(agent, adversary);
+		agent ^= 0b1 << move
+		if score != 0 {
+			return agent | (0b1 << move)
+		}
+
+		adversary |= 0b1 << move
+		score = evalBoard(agent, adversary);
+		adversary ^= 0b1 << move
+
+		if score != 0 {
+			return agent | (0b1 << move)
+		}
+	}
+	return getRandomMove(agent, adversary)
+}
+
+func getRandomMove(agent, adversary uint16) uint16 {
+	move := uint16(10000)
+	board := agent | adversary
+
+	for move >= N*N || (board | (0b1 << move)) == board {
+		move = uint16(rand.Intn(int(N*N)))
+	}
+
+	return (agent | 0b1<<move)
 }
 
 func printBoard(xMoves, oMoves uint16) {
@@ -227,11 +272,11 @@ func printBoard(xMoves, oMoves uint16) {
 		for j := range N {
 			idx := uint16(0b1 << (i*N + j))
 			if xMoves&idx != 0 {
-				fmt.Printf("X ")
+				fmt.Print("X ")
 			} else if oMoves&idx != 0 {
-				fmt.Printf("O ")
+				fmt.Print("O ")
 			} else {
-				fmt.Printf("- ")
+				fmt.Print("- ")
 			}
 		}
 		fmt.Println("")
@@ -258,14 +303,13 @@ func main() {
 
 		if score := evalBoard(player1, player2); score != 0 {
 			if score > 0 {
-				fmt.Println("X Wins", score)
+				fmt.Print("\nX Wins!\n")
 			} else {
-				fmt.Println("O Wins", score)
+				fmt.Printf("\nO Wins!\n")
 			}
 			break
 		}
 
 		xTurn = !xTurn
 	}
-	fmt.Println(ttHits)
 }
