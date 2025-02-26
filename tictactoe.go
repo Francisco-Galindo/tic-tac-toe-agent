@@ -157,7 +157,7 @@ func negamax(boardHash uint64, agent, adversary uint16, depth uint16, alpha, bet
 		ttEntry = &TtEntry{zobrist: boardHash}
 	}
 
-	if depth == 0 || isFull(agent|adversary) {
+	if depth == 0 {
 		return 0
 	}
 	score := evalBoard(adversary, agent)
@@ -167,6 +167,9 @@ func negamax(boardHash uint64, agent, adversary uint16, depth uint16, alpha, bet
 		} else {
 			return score - int16(depth)
 		}
+	}
+	if isFull(agent|adversary) {
+		return 0
 	}
 	value := int16(-10000)
 	for _, move := range getPossibleMoves(agent | adversary) {
@@ -234,7 +237,7 @@ func getSmartMove(agent, adversary uint16) uint16 {
 		for _, move := range getPossibleMoves(agent | adversary) {
 			agent |= 0b1 << move // Haz el movimiento
 			boardHash := zobrist_hash(adversary, agent)
-			newScore := -negamax(boardHash, agent, adversary, i, -10000, 10000, false)
+			newScore := -negamax(boardHash, agent, adversary, i+1, -10000, 10000, false)
 
 			if newScore > 0 {
 				return agent | (0b1 << move)
@@ -264,6 +267,7 @@ func getSmartMove(agent, adversary uint16) uint16 {
 			adversary ^= 0b1 << move
 		}
 	}
+
 
 	return agent | (0b1 << bestMove)
 }
