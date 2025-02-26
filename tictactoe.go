@@ -59,6 +59,7 @@ var WINNING_PATTERNS = []uint16{
 	0b0000001001001000,
 	0b0001001001000000,
 	0b0010010010000000,
+	// COL_1, COL_2, COL_3, ROW_1, ROW_2, ROW_3, DIAG_DOWN, DIAG_UP,
 }
 
 var zobrist_table = make([]uint64, 2*N*N)
@@ -159,9 +160,9 @@ func negamax(boardHash uint64, agent, adversary uint16, depth uint16, alpha, bet
 
 		newHash := boardHash
 		if marker {
-			newHash ^= zobrist_table[move]
-		} else {
 			newHash ^= zobrist_table[N*N+move]
+		} else {
+			newHash ^= zobrist_table[move]
 		}
 
 		value = max(value, -negamax(newHash, adversary, agent, depth-1, -beta, -alpha, !marker))
@@ -197,23 +198,27 @@ func playerMove(player, adversary uint16) uint16 {
 }
 
 func agentMove(agent, adversary uint16) uint16 {
-	var score int16 = -1000
-	var bestMove uint16 = 100
-
+	var score int16 = -10000
+	var bestMove uint16 = 1000
 	fmt.Println("Agent's move:")
-	for _, move := range getPossibleMoves(agent | adversary) {
-		agent |= 0b1 << move
-		boardHash := zobrist_hash(adversary, agent)
-		// fmt.Println(boardHash)
-		newScore := -negamax(boardHash, agent, adversary, 16, -10000, 10000, false)
-		// fmt.Println("\t",newScore)
-		agent ^= 0b1 << move
-		if newScore > score {
-			score = newScore
-			bestMove = move
+	for i := range N*N {
+		score = -10000
+		bestMove = 1000
+		for _, move := range getPossibleMoves(agent | adversary) {
+			agent |= 0b1 << move
+			boardHash := zobrist_hash(adversary, agent)
+			// newScore := -negamax(boardHash, agent, adversary, 16, -10000, 10000, false)
+			newScore := -negamax(boardHash, agent, adversary, i, -10000, 10000, false)
+			agent ^= 0b1 << move
+			if newScore > score {
+				score = newScore
+				bestMove = move
+			}
+			if score > 0 {
+				return agent | (0b1 << bestMove)
+			}
 		}
 	}
-	// fmt.Println("Move:", bestMove)
 	return agent | (0b1 << bestMove)
 }
 
@@ -239,20 +244,24 @@ func main() {
 	printBoard(player1, player2)
 	init_zobrist()
 
-	xTurn := false
+	xTurn := true
 	for !isFull(player1 | player2) {
 		if xTurn {
 			player1 = playerMove(player1, player2)
 		} else {
 			start := time.Now()
 			player2 = agentMove(player2, player1)
-			elapsed := time.Since(start).Seconds()
-			fmt.Println("Time: ", elapsed)
+			elapsed := time.Since(start)
+			fmt.Printf("Time to think: %v\n", elapsed)
 		}
 		printBoard(player1, player2)
 
 		if score := evalBoard(player1, player2); score != 0 {
-			fmt.Println("GOL", score)
+			if score > 0 {
+				fmt.Println("X Wins", score)
+			} else {
+				fmt.Println("O Wins", score)
+			}
 			break
 		}
 
