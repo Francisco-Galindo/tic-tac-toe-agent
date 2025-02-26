@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"math/bits"
 	"math/rand"
@@ -13,25 +14,32 @@ const (
 	UPPERBOUND uint8 = 3
 )
 
-const N uint16 = 4
+var N uint16 = 3
 
 const (
-	// OUT_OF_BOUNDS uint16 = 0b1111111000000000
-	// FULL_BOARD    uint16 = 0b0000000111111111
-	// COL_1         uint16 = 0b0000000100100100
-	// COL_2         uint16 = 0b0000000010010010
-	// COL_3         uint16 = 0b0000000001001001
-	// ROW_1         uint16 = 0b0000000111000000
-	// ROW_2         uint16 = 0b0000000000111000
-	// ROW_3         uint16 = 0b0000000000000111
-	// DIAG_UP       uint16 = 0b0000000001010100
-	// DIAG_DOWN     uint16 = 0b0000000100010001
+	COL_1         uint16 = 0b0000000100100100
+	COL_2         uint16 = 0b0000000010010010
+	COL_3         uint16 = 0b0000000001001001
+	ROW_1         uint16 = 0b0000000111000000
+	ROW_2         uint16 = 0b0000000000111000
+	ROW_3         uint16 = 0b0000000000000111
+	DIAG_UP       uint16 = 0b0000000001010100
+	DIAG_DOWN     uint16 = 0b0000000100010001
 
-	OUT_OF_BOUNDS uint16 = 0b0000000000000000
-	FULL_BOARD    uint16 = 0b1111111111111111
 )
 
-var WINNING_PATTERNS = []uint16{
+const (
+	OUT_OF_BOUNDS_3 uint16 = 0b1111111000000000
+	FULL_BOARD_3    uint16 = 0b0000000111111111
+	OUT_OF_BOUNDS_4 uint16 = 0b0000000000000000
+	FULL_BOARD_4    uint16 = 0b1111111111111111
+)
+
+var WINNING_PATTERNS_3 = []uint16 {
+	COL_1, COL_2, COL_3, ROW_1, ROW_2, ROW_3, DIAG_DOWN, DIAG_UP,
+}
+
+var WINNING_PATTERNS_4 = []uint16{
 	0b0000000000000111,
 	0b0000000000001110,
 	0b0000000001110000,
@@ -59,24 +67,31 @@ var WINNING_PATTERNS = []uint16{
 	0b0000001001001000,
 	0b0001001001000000,
 	0b0010010010000000,
-	// COL_1, COL_2, COL_3, ROW_1, ROW_2, ROW_3, DIAG_DOWN, DIAG_UP,
 }
 
-var zobrist_table = make([]uint64, 2*N*N)
+var WINNING_PATTERNS []uint16
+var OUT_OF_BOUNDS uint16
+var FULL_BOARD uint16
+
+var zobrist_table = make([]uint64, 0)
 var ttHits int64 = 0
 var tranTable = make(map[uint64]*TtEntry)
-
-func init_zobrist() {
-	for i := range 2 * N * N {
-		zobrist_table[i] = rand.Uint64()
-	}
-}
+var isGameSmart bool = true
+var isGameDesperate bool
+var isGameRandom bool
 
 type TtEntry struct {
 	zobrist uint64
 	flag    uint8
 	depth   uint16
 	value   int16
+}
+
+func init_zobrist() {
+	zobrist_table = make([]uint64, 2*N*N)
+	for i := range 2 * N * N {
+		zobrist_table[i] = rand.Uint64()
+	}
 }
 
 func zobrist_hash(xMoves, oMoves uint16) uint64 {
@@ -200,7 +215,13 @@ func playerMove(player, adversary uint16) uint16 {
 
 func agentMove(agent, adversary uint16) uint16 {
 	fmt.Println("Agent's move...")
-	return getSmartMove(agent, adversary)
+	if !isGameDesperate && !isGameRandom {
+		return getSmartMove(agent, adversary)
+	} else if isGameDesperate && !isGameRandom {
+		return getDesperateMove(agent, adversary)
+	}
+
+	return getRandomMove(agent, adversary)
 }
 
 func getSmartMove(agent, adversary uint16) uint16 {
@@ -275,11 +296,40 @@ func printBoard(xMoves, oMoves uint16) {
 }
 
 func main() {
+	var xTurn bool
+	var n int
+
+	flag.BoolVar(&xTurn, "a", false, "Does the agent start?")
+	flag.BoolVar(&isGameDesperate, "l", false, "Is the agent trying not to lose? (mutually exclusive with -l)")
+	flag.BoolVar(&isGameRandom, "r", false, "Is the agent random? (mutually exclusive with -r)")
+	flag.IntVar(&n, "n", 3, "Board size")
+	flag.Parse()
+
+	if isGameDesperate && isGameRandom {
+		panic("Options -l and -r are mutually exclusive!!")
+	}
+
+	if n == 3 {
+		OUT_OF_BOUNDS = OUT_OF_BOUNDS_3
+		FULL_BOARD = FULL_BOARD_3
+		WINNING_PATTERNS = WINNING_PATTERNS_3
+		N = 3
+	} else if n == 4 {
+		OUT_OF_BOUNDS = OUT_OF_BOUNDS_4
+		FULL_BOARD = FULL_BOARD_4
+		WINNING_PATTERNS = WINNING_PATTERNS_4
+		N = 4
+	} else {
+		panic("Only n=3,4 are supported!")
+	}
+
+	xTurn = !xTurn
+
+
 	var player1, player2 uint16
 	printBoard(player1, player2)
 	init_zobrist()
 
-	xTurn := true
 	for !isFull(player1 | player2) {
 		if xTurn {
 			player1 = playerMove(player1, player2)
