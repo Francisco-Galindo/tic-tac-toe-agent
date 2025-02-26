@@ -17,15 +17,14 @@ const (
 var N uint16 = 3
 
 const (
-	COL_1         uint16 = 0b0000000100100100
-	COL_2         uint16 = 0b0000000010010010
-	COL_3         uint16 = 0b0000000001001001
-	ROW_1         uint16 = 0b0000000111000000
-	ROW_2         uint16 = 0b0000000000111000
-	ROW_3         uint16 = 0b0000000000000111
-	DIAG_UP       uint16 = 0b0000000001010100
-	DIAG_DOWN     uint16 = 0b0000000100010001
-
+	COL_1     uint16 = 0b0000000100100100
+	COL_2     uint16 = 0b0000000010010010
+	COL_3     uint16 = 0b0000000001001001
+	ROW_1     uint16 = 0b0000000111000000
+	ROW_2     uint16 = 0b0000000000111000
+	ROW_3     uint16 = 0b0000000000000111
+	DIAG_UP   uint16 = 0b0000000001010100
+	DIAG_DOWN uint16 = 0b0000000100010001
 )
 
 const (
@@ -35,7 +34,7 @@ const (
 	FULL_BOARD_4    uint16 = 0b1111111111111111
 )
 
-var WINNING_PATTERNS_3 = []uint16 {
+var WINNING_PATTERNS_3 = []uint16{
 	COL_1, COL_2, COL_3, ROW_1, ROW_2, ROW_3, DIAG_DOWN, DIAG_UP,
 }
 
@@ -324,7 +323,6 @@ func main() {
 	}
 
 	xTurn = !xTurn
-
 
 	var player1, player2 uint16
 	printBoard(player1, player2)
